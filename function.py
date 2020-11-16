@@ -136,7 +136,7 @@ def get_as_base64(url):
 def audioToTranscript(link):
     base64data = get_as_base64(link)
     print(link)
-    url = 'https://speech.googleapis.com/v1/speech:recognize?key=AIzaSyAVArvLpiAaq1Muod7UkL2Cj9zmcoZHPic'
+    url = 'https://speech.googleapis.com/v1/speech:recognize?key='
     post_fields = {"config": {
     "encoding": "LINEAR16",
     "languageCode": "en-US",
