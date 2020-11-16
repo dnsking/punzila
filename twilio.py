@@ -18,10 +18,12 @@ from twilio.rest import Client
 import time
 
 
+token = "QBtoken"
+
 app = Flask(__name__)
+app.secret_key = token
 
 bytesPersecond = 64000
-
 def twiml(resp):
     resp = flask.Response(str(resp))
     resp.headers['Content-Type'] = 'text/xml'
@@ -32,7 +34,6 @@ def twiml(resp):
 def home():
     return render_template('index.html')
 
-token = 'yourQuickBaseToken'
 
 @app.route("/ivr/playaudio/<digits>", methods=['GET'])
 def playaudio(digits):
@@ -91,6 +92,8 @@ def subtoclass(options):
     response = VoiceResponse()
     requests.post("https://v4z3nmrz83.execute-api.us-east-1.amazonaws.com/PunzilaStage/lesson", json={'Action': 'AddStudentToSub'
     , 'PhoneNumber': request.form['Caller'], 'UniqueClassId': optionsrec[selected_option]['UniqueClassId']})
+    headers = {'content-type': 'application/json','qb-realm-hostname':'hackathon20-nsiwale.quickbase.com','Authorization':token}
+    requests.post("https://api.quickbase.com/v1/records", json={"to": "bqyv769ct", "data": [ {"6": {"value": request.form['Caller'] }}]},headers=headers)
     response.say("Thank you for subscribing to the "+optionsrec[selected_option]['Name']+" class. "+" Goodbye")
 
 
@@ -153,8 +156,9 @@ def _gotosub(response):
 
     return response
 
-@app.route("/ivr/playaudiourl/<url>", methods=['GET'])
-def playaudiourl(url):
+@app.route("/ivr/playaudiourl", methods=['GET'])
+def playaudiourl():
+    url = session.get('playaudiourldata', None)
     print "playaudiourl url "+str(url)
     #response = VoiceResponse()
     #response.say("Please wait",voice="alice", language="en-GB", loop=1)
@@ -171,20 +175,21 @@ def playaudiourl(url):
                 #nLoops = nLoops+1
     return Response(generateAudioUrl(), mimetype="audio/mpeg")
 
-@app.route('/ivr/subtolesson/<options>', methods=['POST'])
-def subtolesson(options):
-    parsedoptions = json.loads(options)
+@app.route('/ivr/subtolesson', methods=['POST'])
+def subtolesson():
+    parsedoptions = json.loads(session.get('subtolessondata', None))
     selected_option = int(request.form['Digits'])
-    print "subtolesson "+str(selected_option)
-    print "subtolesson  options "+str(optionsn)
+    print "subtolesson "+str(parsedoptions)
+    print "subtolesson  options "+str(parsedoptions)
+    session['playaudiourldata'] = parsedoptions[selected_option]['LessionUrl']
     response = VoiceResponse()
-    response.play(url=url_for('playaudiourl',url=parsedoptions[selected_option]['LessionUrl']), loop=1)
+    response.play(url=url_for('playaudiourl'), loop=1)
     return twiml(response)
 
 
 @app.route("/ivr/searchlesson", methods=['POST'])
 def searchlesson():
-    #time.sleep(5)
+    time.sleep(5)
     recording_url = request.form['RecordingUrl']
     response = VoiceResponse()
     print "searchlesson "+str(request)
@@ -203,12 +208,15 @@ def searchlesson():
         for option in options:
             message = message+" Press "+str(n)+" to play to "+option['Title']+"."
             n = n+1
+        
+        session['subtolessondata'] = json.dumps(options)
     
         with response.gather(
-            num_digits=1, action=url_for('subtolesson',options=json.dumps(options)),timeout=10,  method="POST"
+            num_digits=1, action=url_for('subtolesson'),timeout=10,  method="POST"
         ) as g:
             g.say(message=message, loop=1)
-    except:
+    except Exception as e:
+        print str(e)
         with response.gather(timeout="1"
         ) as g:
             g.say("Sorry, I did not get that. Please state the type of lession you are looking for after the tone.", loop=1)
@@ -219,7 +227,7 @@ def searchlesson():
 @app.route("/ivr/searchlessonrecording", methods=['POST'])
 def searchlessonrecording():
     response = VoiceResponse()
-    r = response.record(max_length="8", action=url_for('searchlesson'),trim=False, method="POST",play_beep=True)
+    r = response.record(max_length="8", action=url_for('searchlesson'), method="POST",play_beep=True)
     print "_gotosub "+str(r)
     return twiml(response)
 
@@ -245,8 +253,7 @@ def welcome():
         g.say(message="Welcome to Punzila. "+
               "Please press 1 to go to lession. " +
               "Press 2 to subsribe to class. "+
-              "Press 3 to search for lession. "+
-              "Press 4 to go to bookmarks. ", loop=1)
+              "Press 3 to search for lession. ", loop=1)
     return twiml(response)
 
 
@@ -268,7 +275,7 @@ def menu():
 
 def _redirect_welcome():
     response = VoiceResponse()
-    response.say("Returning to the main menu")
+    response.say("Returning to the main menu", voice="alice", language="en-GB")
     response.redirect(url_for('welcome'))
 
     return twiml(response)
